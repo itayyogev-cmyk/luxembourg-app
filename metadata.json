@@ -1,0 +1,8 @@
+{
+  "name": "Uriel clone",
+  "description": "עידכון גירסה 1",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ]
+}
