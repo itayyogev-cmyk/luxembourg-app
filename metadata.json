@@ -1,6 +1,6 @@
 {
-  "name": "Uriel clone",
-  "description": "עידכון גירסה 1",
+  "name": "Luxemburg-Lab",
+  "description": "Simple application for Luxemburg labs",
   "requestFramePermissions": [
     "geolocation",
     "camera"
