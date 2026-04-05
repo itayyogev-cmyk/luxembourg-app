@@ -163,10 +163,13 @@ const Layout: React.FC<LayoutProps> = ({
             >
               <History size={24} />
             </button>
-            <div className="font-black text-2xl text-teal-700 tracking-tighter flex items-center gap-2">
+            <button 
+              onClick={() => onStepChange(AppStep.SETUP)}
+              className="font-black text-2xl text-teal-700 tracking-tighter flex items-center gap-2 hover:opacity-80 transition-opacity"
+            >
               <div className="bg-teal-700 text-white w-8 h-8 rounded-xl flex items-center justify-center text-sm">FL</div>
               <span className="hidden sm:inline">FieldLab</span>
-            </div>
+            </button>
             {saveIndicator && (
               <div className="flex items-center gap-1.5 text-teal-600 text-[10px] font-black uppercase tracking-widest bg-teal-50 px-2 py-1 rounded-full animate-in fade-in duration-500">
                 <CheckCircle size={10} />

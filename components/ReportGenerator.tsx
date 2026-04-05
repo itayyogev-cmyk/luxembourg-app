@@ -5,6 +5,8 @@ import { Download, Sparkles, Loader2, BrainCircuit, Printer, TableProperties, Fi
 import { generateReportAnalysis } from '../services/geminiService';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, HeadingLevel, AlignmentType, WidthType, BorderStyle, ImageRun } from 'docx';
+import { saveAs } from 'file-saver';
 
 // --- SHARED LABELS ---
 const CONTEXT_LABELS: Record<string, string> = {
@@ -280,37 +282,279 @@ const ReportGenerator: React.FC<Props> = ({ experiment, setExperiment, settings 
     window.URL.revokeObjectURL(url);
   };
 
+  const handleExportToWord = async () => {
+    setIsAnalyzing(true);
+    try {
+      const children: any[] = [
+        // Header / Title Area
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: "LUXEMBOURG",
+              bold: true,
+              size: 32,
+              color: "115E59", // teal-800
+            }),
+          ],
+          alignment: AlignmentType.LEFT,
+        }),
+        new Paragraph({
+          text: experiment.title || 'דוח ניסוי שדה',
+          heading: HeadingLevel.HEADING_1,
+          alignment: AlignmentType.RIGHT,
+          bidirectional: true,
+          spacing: { before: 200, after: 400 },
+        }),
+        
+        // Section 1: Hypothesis
+        new Paragraph({
+          text: '1. מטרת הניסוי והשערות',
+          heading: HeadingLevel.HEADING_2,
+          alignment: AlignmentType.RIGHT,
+          bidirectional: true,
+          spacing: { before: 400, after: 200 },
+        }),
+        new Paragraph({
+          text: experiment.hypothesis || "לא הוגדרה מטרת ניסוי.",
+          alignment: AlignmentType.RIGHT,
+          bidirectional: true,
+          spacing: { after: 400 },
+        }),
+
+        // Section 2: Details
+        new Paragraph({
+          text: '2. פרטי רקע ולוח זמנים',
+          heading: HeadingLevel.HEADING_2,
+          alignment: AlignmentType.RIGHT,
+          bidirectional: true,
+          spacing: { before: 400, after: 200 },
+        }),
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: Object.entries(reportDetails).map(([key, value]) => (
+            new TableRow({
+              children: [
+                new TableCell({
+                  children: [new Paragraph({ text: (value as string) || '-', alignment: AlignmentType.RIGHT, bidirectional: true })],
+                  verticalAlign: AlignmentType.CENTER,
+                  margins: { top: 100, bottom: 100, left: 100, right: 100 },
+                }),
+                new TableCell({
+                  children: [new Paragraph({ 
+                    children: [new TextRun({ text: CONTEXT_LABELS[key] || key, bold: true })],
+                    alignment: AlignmentType.RIGHT, 
+                    bidirectional: true 
+                  })],
+                  shading: { fill: "F1F5F9" },
+                  verticalAlign: AlignmentType.CENTER,
+                  margins: { top: 100, bottom: 100, left: 100, right: 100 },
+                }),
+              ],
+            })
+          )),
+        }),
+
+        // Section 3: Protocol
+        new Paragraph({
+          text: '3. פרוטוקול טיפולים',
+          heading: HeadingLevel.HEADING_2,
+          alignment: AlignmentType.RIGHT,
+          bidirectional: true,
+          spacing: { before: 400, after: 200 },
+        }),
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'מינונים והרכב', bold: true })], alignment: AlignmentType.RIGHT, bidirectional: true })], shading: { fill: "F1F5F9" }, margins: { top: 100, bottom: 100 } }),
+                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'שם הטיפול', bold: true })], alignment: AlignmentType.RIGHT, bidirectional: true })], shading: { fill: "F1F5F9" }, margins: { top: 100, bottom: 100 } }),
+                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '#', bold: true })], alignment: AlignmentType.CENTER, bidirectional: true })], shading: { fill: "F1F5F9" }, margins: { top: 100, bottom: 100 } }),
+              ],
+            }),
+            ...experiment.treatments.map(t => (
+              new TableRow({
+                children: [
+                  new TableCell({
+                    children: t.products.map(p => new Paragraph({ text: `${p.name} (${p.dosage})`, alignment: AlignmentType.RIGHT, bidirectional: true })),
+                    margins: { top: 100, bottom: 100 },
+                  }),
+                  new TableCell({ children: [new Paragraph({ text: t.name, alignment: AlignmentType.RIGHT, bidirectional: true })], margins: { top: 100, bottom: 100 } }),
+                  new TableCell({ children: [new Paragraph({ text: t.number.toString(), alignment: AlignmentType.CENTER, bidirectional: true })], margins: { top: 100, bottom: 100 } }),
+                ],
+              })
+            )),
+          ],
+        }),
+
+        // Section 4: Results
+        new Paragraph({
+          text: '4. תוצאות וניתוח סטטיסטי',
+          heading: HeadingLevel.HEADING_2,
+          alignment: AlignmentType.RIGHT,
+          bidirectional: true,
+          spacing: { before: 400, after: 200 },
+        }),
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            // Header row
+            new TableRow({
+              children: [
+                ...[...evalDates].reverse().map(d => (
+                  new TableCell({ 
+                    children: [new Paragraph({ children: [new TextRun({ text: `${formatDate(d)}\n${getDAA(d)}`, bold: true })], alignment: AlignmentType.CENTER, bidirectional: true })],
+                    shading: { fill: "F1F5F9" },
+                    margins: { top: 100, bottom: 100 },
+                  })
+                )),
+                new TableCell({ 
+                  children: [new Paragraph({ children: [new TextRun({ text: 'טיפול', bold: true })], alignment: AlignmentType.RIGHT, bidirectional: true })],
+                  shading: { fill: "F1F5F9" },
+                  margins: { top: 100, bottom: 100 },
+                }),
+              ],
+            }),
+            // Data rows
+            ...experiment.treatments.map(t => (
+              new TableRow({
+                children: [
+                  ...[...evalDates].reverse().map(d => {
+                    const stats = calculateTukey(experiment.treatments, experiment.evaluations[d]?.filter(dp => dp.parameterId === (firstParam?.id || '')) || []);
+                    const res = stats[t.id];
+                    return new TableCell({
+                      children: [new Paragraph({ text: res ? `${res.mean.toFixed(1)} ${res.letter}` : '-', alignment: AlignmentType.CENTER, bidirectional: true })],
+                      margins: { top: 100, bottom: 100 },
+                    });
+                  }),
+                  new TableCell({ children: [new Paragraph({ text: t.name, alignment: AlignmentType.RIGHT, bidirectional: true })], margins: { top: 100, bottom: 100 } }),
+                ],
+              })
+            )),
+          ],
+        }),
+
+        // Section 5: AI Analysis
+        new Paragraph({
+          text: '5. דיון ומסקנות',
+          heading: HeadingLevel.HEADING_2,
+          alignment: AlignmentType.RIGHT,
+          bidirectional: true,
+          spacing: { before: 400, after: 200 },
+        }),
+        new Paragraph({
+          text: aiAnalysis || 'לא הופקה אנליזה.',
+          alignment: AlignmentType.RIGHT,
+          bidirectional: true,
+          spacing: { after: 400 },
+        }),
+      ];
+
+      // Section 6: Images Appendix
+      if (imagesAppendix.length > 0) {
+        children.push(new Paragraph({
+          text: 'נספח תמונות',
+          heading: HeadingLevel.HEADING_2,
+          alignment: AlignmentType.RIGHT,
+          bidirectional: true,
+          spacing: { before: 400, after: 200 },
+        }));
+
+        // Word handles images better in a grid or sequence
+        for (const img of imagesAppendix) {
+          try {
+            // Convert base64 to array buffer for docx
+            const base64Data = img.photo.split(',')[1];
+            const binaryString = window.atob(base64Data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+
+            children.push(new Paragraph({
+              children: [
+                new ImageRun({
+                  data: bytes,
+                  transformation: {
+                    width: 400,
+                    height: 225,
+                  },
+                } as any),
+              ],
+              alignment: AlignmentType.CENTER,
+            }));
+            children.push(new Paragraph({
+              text: `[ ${img.treatment.name} | ${formatDate(img.date)} ]`,
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 200 },
+            }));
+          } catch (e) {
+            console.error("Error adding image to Word:", e);
+          }
+        }
+      }
+
+      const doc = new Document({
+        sections: [{
+          properties: {},
+          children: children,
+        }],
+      });
+
+      const blob = await Packer.toBlob(doc);
+      saveAs(blob, `Report_${(experiment.title || 'Field_Trial').replace(/\s+/g, '_')}.docx`);
+    } catch (err) {
+      console.error("Word Export Error:", err);
+      alert("שגיאה בייצוא Word.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleExportToPdf = async () => {
     if (!reportRef.current) return;
     
-    setIsAnalyzing(true); // Reuse loading state for PDF generation
+    setIsAnalyzing(true);
     try {
-      const element = reportRef.current;
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight
-      });
-      
-      const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 15; // mm
+      const contentWidth = pageWidth - (2 * margin);
       
-      let heightLeft = pdfHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-      heightLeft -= pdf.internal.pageSize.getHeight();
-
-      while (heightLeft >= 0) {
-        position = heightLeft - pdfHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-        heightLeft -= pdf.internal.pageSize.getHeight();
+      let currentY = margin;
+      
+      // Target the report view
+      const element = reportRef.current;
+      
+      // Get the header and all sections
+      const header = element.querySelector('.report-header') as HTMLElement;
+      const sections = Array.from(element.querySelectorAll('.report-section')) as HTMLElement[];
+      
+      const elementsToCapture = [header, ...sections].filter(Boolean);
+      
+      for (let i = 0; i < elementsToCapture.length; i++) {
+        const el = elementsToCapture[i];
+        
+        const canvas = await html2canvas(el, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff'
+        });
+        
+        const imgData = canvas.toDataURL('image/png');
+        const imgProps = pdf.getImageProperties(imgData);
+        const imgHeight = (imgProps.height * contentWidth) / imgProps.width;
+        
+        // Check if we need a new page
+        if (currentY + imgHeight > pageHeight - margin) {
+          pdf.addPage();
+          currentY = margin;
+        }
+        
+        pdf.addImage(imgData, 'PNG', margin, currentY, contentWidth, imgHeight);
+        currentY += imgHeight + 10; // 10mm gap
       }
 
       pdf.save(`Report_${(experiment.title || 'Field_Trial').replace(/\s+/g, '_')}.pdf`);
@@ -352,6 +596,9 @@ const ReportGenerator: React.FC<Props> = ({ experiment, setExperiment, settings 
           <button onClick={handleExportToPdf} disabled={isAnalyzing} className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-2xl font-black text-sm hover:bg-red-700 transition-all border-2 border-black shadow-lg disabled:opacity-50">
             {isAnalyzing ? <Loader2 className="animate-spin" size={18} /> : <FileText size={18} />} ייצוא PDF
           </button>
+          <button onClick={handleExportToWord} disabled={isAnalyzing} className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl font-black text-sm hover:bg-blue-700 transition-all border-2 border-black shadow-lg disabled:opacity-50">
+            {isAnalyzing ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />} ייצוא Word
+          </button>
           <button onClick={handleExportToMarkdown} className="flex items-center gap-2 px-6 py-3 bg-slate-700 text-white rounded-2xl font-black text-sm hover:bg-slate-800 transition-all border-2 border-black shadow-lg">
             <FileCode size={18} /> ייצוא Markdown
           </button>
@@ -377,7 +624,7 @@ const ReportGenerator: React.FC<Props> = ({ experiment, setExperiment, settings 
       </section>
 
       <div id="report-view" ref={reportRef}>
-        <div className="flex justify-between items-start mb-12 border-b-4 border-black pb-8">
+        <div className="report-header flex justify-between items-start mb-12 border-b-4 border-black pb-8">
           <div className="text-right">
              <h1 className="text-4xl font-black uppercase tracking-tight mb-2 leading-none text-slate-900">{experiment?.title || 'דוח ניסוי שדה'}</h1>
              <p className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mt-4">Scientific Field Evaluation Report</p>
@@ -427,7 +674,7 @@ const ReportGenerator: React.FC<Props> = ({ experiment, setExperiment, settings 
         </section>
 
         <section className="report-section">
-           <h2 className="text-xl font-black mb-4 flex items-center gap-2 bg-slate-100 p-2 rounded-lg"><TableProperties size={22} /> 5. תוצאות וניתוח סטטיסטי</h2>
+           <h2 className="text-xl font-black mb-4 flex items-center gap-2 bg-slate-100 p-2 rounded-lg"><TableProperties size={22} /> 4. תוצאות וניתוח סטטיסטי</h2>
            <table className="report-table text-center">
               <thead>
                 <tr>
@@ -456,7 +703,7 @@ const ReportGenerator: React.FC<Props> = ({ experiment, setExperiment, settings 
         </section>
 
         <section className="report-section">
-          <h2 className="text-xl font-black mb-4 flex items-center gap-3 bg-slate-100 p-2 rounded-lg"><BrainCircuit size={28} /> 6. דיון ומסקנות</h2>
+          <h2 className="text-xl font-black mb-4 flex items-center gap-3 bg-slate-100 p-2 rounded-lg"><BrainCircuit size={28} /> 5. דיון ומסקנות</h2>
           {isAnalyzing ? (
             <div className="flex flex-col items-center py-12 gap-4"><Loader2 className="animate-spin text-teal-600" size={32} /></div>
           ) : (

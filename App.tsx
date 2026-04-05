@@ -58,7 +58,8 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
 const getFreshId = () => typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `exp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-const INITIAL_EXPERIMENT_TEMPLATE: Omit<Experiment, 'id'> = {
+const getInitialExperiment = (id: string): Experiment => ({
+  id,
   title: 'ניסוי חדש',
   category: ExperimentCategory.WEEDS,
   designType: DesignType.RCBD,
@@ -85,7 +86,7 @@ const INITIAL_EXPERIMENT_TEMPLATE: Omit<Experiment, 'id'> = {
   applicationMethod: '',
   applicationDates: [],
   reportMetadata: {}
-};
+});
 
 const INITIAL_SETTINGS: GlobalSettings = {
   reportStyleDescription: '',
@@ -95,8 +96,8 @@ const INITIAL_SETTINGS: GlobalSettings = {
 
 const migrateExperiment = (exp: any): Experiment => {
   const baseId = getFreshId();
-  const base = { ...INITIAL_EXPERIMENT_TEMPLATE, id: baseId };
-  if (!exp) return base as Experiment;
+  const base = getInitialExperiment(baseId);
+  if (!exp) return base;
   
   const migratedTreatments = (exp.treatments || []).map((t: any): Treatment => ({
     ...t,
@@ -184,10 +185,10 @@ const App: React.FC = () => {
       }
       const legacy = localStorage.getItem('fieldlab_current_experiment');
       if (legacy) return migrateExperiment(JSON.parse(legacy));
-      return { ...INITIAL_EXPERIMENT_TEMPLATE, id: getFreshId() } as Experiment;
+      return getInitialExperiment(getFreshId());
     } catch (e) {
       console.error("Failed to load active experiment", e);
-      return { ...INITIAL_EXPERIMENT_TEMPLATE, id: getFreshId() } as Experiment;
+      return getInitialExperiment(getFreshId());
     }
   });
 
@@ -279,18 +280,23 @@ const App: React.FC = () => {
   }, []);
 
   const handleNew = useCallback(() => {
-    console.log('Reset triggered');
     try {
-      const confirmMsg = 'האם אתה בטוח שברצונך להתחיל ניסוי חדש? כל הנתונים הנוכחיים (כולל המאגרים והארכיון) יימחקו לצמיתות.';
+      const confirmMsg = 'האם אתה בטוח שברצונך להתחיל ניסוי חדש? הניסוי הנוכחי יישמר בארכיון ותפתח טיוטה חדשה ונקייה.';
       if (window.confirm(confirmMsg)) {
-        setIsResetting(true);
-        localStorage.clear();
-        window.location.reload();
+        handleSave(); // Save current before switching
+        const freshId = getFreshId();
+        const freshExp = getInitialExperiment(freshId);
+        
+        // Use functional updates to ensure we have latest state
+        setExperiment(freshExp);
+        setAllExperiments(prev => ({ ...prev, [freshId]: freshExp }));
+        localStorage.setItem('fieldlab_active_experiment_id', freshId);
+        setCurrentStep(AppStep.PLANNING);
       }
     } catch (err) {
       console.error('Error in handleNew:', err);
     }
-  }, []);
+  }, [handleSave]);
 
   const handleLoadExperiment = useCallback((id: string) => {
     handleSave(); 
@@ -312,7 +318,7 @@ const App: React.FC = () => {
       
       if (id === experiment.id) {
         const freshId = getFreshId();
-        const freshExp = { ...INITIAL_EXPERIMENT_TEMPLATE, id: freshId } as Experiment;
+        const freshExp = getInitialExperiment(freshId);
         setExperiment(freshExp);
         setAllExperiments(prev => ({ ...prev, [freshId]: freshExp }));
         setCurrentStep(AppStep.SETUP);
@@ -323,7 +329,14 @@ const App: React.FC = () => {
   const renderStep = () => {
     switch (currentStep) {
       case AppStep.SETUP:
-        return <Setup onStart={() => setCurrentStep(AppStep.PLANNING)} />;
+        return <Setup onStart={() => {
+          const freshId = getFreshId();
+          const freshExp = getInitialExperiment(freshId);
+          setExperiment(freshExp);
+          setAllExperiments(prev => ({ ...prev, [freshId]: freshExp }));
+          localStorage.setItem('fieldlab_active_experiment_id', freshId);
+          setCurrentStep(AppStep.PLANNING);
+        }} />;
       case AppStep.PLANNING:
         return <PlanExperiment experiment={experiment} setExperiment={setExperiment} onNext={() => setCurrentStep(AppStep.MAP)} settings={settings} />;
       case AppStep.MAP:
